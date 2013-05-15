@@ -33,9 +33,8 @@ extern u64 mdp_max_bw;
 extern u32 mdp_bw_ab_factor;
 extern u32 mdp_bw_ib_factor;
 
-#define MDP4_BW_AB_DEFAULT_FACTOR (200)	/* 2.00 */
-#define MDP4_BW_IB_DEFAULT_FACTOR (210)	/* 2.10 */
-
+#define MDP4_BW_AB_DEFAULT_FACTOR (115) /* 1.15 */
+#define MDP4_BW_IB_DEFAULT_FACTOR (150) /* 1.5 */
 #define MDP_BUS_SCALE_AB_STEP (0x4000000)
 
 #define MDP4_OVERLAYPROC0_BASE	0x10000
@@ -958,8 +957,6 @@ int mdp4_calc_blt_mdp_bw(struct msm_fb_data_type *mfd,
 			 struct mdp4_overlay_pipe *pipe);
 int mdp4_overlay_mdp_perf_req(struct msm_fb_data_type *mfd);
 void mdp4_overlay_mdp_perf_upd(struct msm_fb_data_type *mfd, int flag);
-int mdp4_update_base_blend(struct msm_fb_data_type *mfd,
-				struct mdp_blend_cfg *mdp_blend_cfg);
 u32 mdp4_get_mixer_num(u32 panel_type);
 int mdp4_overlay_reset(void);
 

@@ -2196,7 +2196,7 @@ void mdp4_mixer_blend_setup(int mixer)
 	struct blend_cfg *blend;
 	int i, off, alpha_drop;
 	unsigned char *overlay_base;
-	uint32 c0, c1, c2, base_premulti;
+	uint32 c0, c1, c2;
 
 
 	d_pipe = ctrl->stage[mixer][MDP4_MIXER_STAGE_BASE];
@@ -2206,8 +2206,6 @@ void mdp4_mixer_blend_setup(int mixer)
 	}
 
 	blend = &ctrl->blend[mixer][MDP4_MIXER_STAGE0];
-	base_premulti = ctrl->blend[mixer][MDP4_MIXER_STAGE_BASE].op &
-		MDP4_BLEND_FG_ALPHA_BG_CONST;	
 	for (i = MDP4_MIXER_STAGE0; i < MDP4_MIXER_STAGE_MAX; i++) {
 		blend->solidfill = 0;
 		blend->op = (MDP4_BLEND_FG_ALPHA_FG_CONST |
@@ -3037,14 +3035,13 @@ int mdp4_overlay_mdp_perf_req(struct msm_fb_data_type *mfd)
 	int yuvcount =0;
 	int src_h_total = 0;
 	int src_w_total = 0;
-	static u64 minimum_ab=0;
-	static u64 minimum_ib=0;
  
 	u32 cnt = 0;
 	int ret = -EINVAL;
 	u64 ab_quota_total = 0, ib_quota_total = 0;
 	u64 ab_quota_port0 = 0, ib_quota_port0 = 0;
 	u64 ab_quota_port1 = 0, ib_quota_port1 = 0;
+	u64 ib_quota_min = 0;
 
 	if (!mfd) {
 		pr_err("%s: mfd is null!\n", __func__);
@@ -3083,6 +3080,12 @@ int mdp4_overlay_mdp_perf_req(struct msm_fb_data_type *mfd)
 				ab_quota_port0 += pipe->bw_ab_quota;
 				ib_quota_port0 += pipe->bw_ib_quota;
 			}
+		} else {
+			if (ib_quota_min == 0)
+				ib_quota_min = pipe->bw_ib_quota;
+			else
+				ib_quota_min = min(ib_quota_min,
+						   pipe->bw_ib_quota);
 		}
 
 		if(pipe->pipe_type == OVERLAY_TYPE_RGB){
@@ -3153,43 +3156,7 @@ int mdp4_overlay_mdp_perf_req(struct msm_fb_data_type *mfd)
 	}
 #endif
 	
-	if(minimum_ab == 0 ||minimum_ib == 0){
-		minimum_ab = (1920*1080*4*60)>>16;
-		minimum_ab = (minimum_ab*MDP4_BW_AB_DEFAULT_FACTOR/100)<<16;
-		minimum_ib = (1920*1080*4*60)>>16;
-		minimum_ib = (minimum_ib*MDP4_BW_IB_DEFAULT_FACTOR/100)<<16;
-	}
-
-	/*
-	 * For small video + small rgb layers above them
-	 * offset some bw
-	 */
-	if((cnt>=3)&&(ab_quota_total<minimum_ab)&&yuvcount==1){
-		if((verysmallarea+yuvcount)==(cnt-1)){
-			ab_quota_total +=MDP_BUS_SCALE_AB_STEP;
-			ib_quota_total +=MDP_BUS_SCALE_AB_STEP;
-		}
-		else{
-			ab_quota_total= minimum_ab;
-			ib_quota_total= minimum_ib;
-		}
-	}
-
-	/*
-	 * For Small RGB layers without video layer offset some
-	 * bandwidth to prevent underruns
-	 */
-	if((cnt>=2) && (src_h_total * src_w_total < 1920*1080) 
-			&& (ab_quota_total<minimum_ab) && yuvcount == 0) {
-		u64 bw_extra =  (minimum_ab - ab_quota_total) >>  1 ;
-		int fact = ((int) (bw_extra>>16))/((int)(ab_quota_total>>16));
-
-		/* Do not increase bw for layers which require more than 3 folds */
-		if(fact <= 3) {
-			ab_quota_total += bw_extra;
-			ib_quota_total += bw_extra;
-		}
-	}
+	ib_quota_total = max(ib_quota_total, ib_quota_min);
 
 	perf_req->mdp_ab_bw = roundup(ab_quota_total, MDP_BUS_SCALE_AB_STEP);
 	perf_req->mdp_ib_bw = roundup(ib_quota_total, MDP_BUS_SCALE_AB_STEP);
@@ -4227,25 +4194,6 @@ struct ion_client *mdp4_get_ion_client(void)
 }
 #endif
 
-int mdp4_update_base_blend(struct msm_fb_data_type *mfd,
-			struct mdp_blend_cfg *mdp_blend_cfg)
-{
-	int ret = 0;
-	u32 mixer_num;
-	struct blend_cfg *blend;
-	mixer_num = mdp4_get_mixer_num(mfd->panel_info.type);
-	if (!ctrl)
-		return -EPERM;
-	blend = &ctrl->blend[mixer_num][MDP4_MIXER_STAGE_BASE];
-	if (mdp_blend_cfg->is_premultiplied) {
-		blend->bg_alpha = 0xFF;
-		blend->op = MDP4_BLEND_FG_ALPHA_BG_CONST;
-	} else {
-		blend->op = MDP4_BLEND_FG_ALPHA_FG_PIXEL;
-		blend->bg_alpha = 0;
-	}
-	return ret;
-}
 int mdp4_overlay_reset()
 {
 #if 0
